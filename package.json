@@ -1,0 +1,19 @@
+{
+  "name": "authbackend",
+  "version": "1.0.0",
+  "description": "This is the auth backend that is use for singnup and login page ",
+  "license": "ISC",
+  "author": "Aditya singh",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+  "dev": "nodemon src/server.js"
+},
+  "dependencies": {
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.14"
+  }
+}
