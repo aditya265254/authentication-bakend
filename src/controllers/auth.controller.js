@@ -35,3 +35,16 @@ export const logIn = asyncHandler(async (req, res) => {
     userFind.password = undefined
     return res.status(200).json(new ApiResponse(200, {user: userFind, token}, "login sucessfully"))
 })
+
+export const googleCallback = asyncHandler(async (req, res) => {
+
+    const token = jwt.sign(
+        { _id: req.user._id, email: req.user.email },
+        process.env.JWT_SECRET,
+        { expiresIn: process.env.JWT_EXPIRY }
+    )
+    
+    return res.status(200).json(
+        new ApiResponse(200, { user: req.user, token }, "Google login successful")
+    )
+})
