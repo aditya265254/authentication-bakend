@@ -9,11 +9,13 @@ const app = express()
 app.use(express.json())
 
 connectDB()
+
 app.use(session({
     secret: process.env.JWT_SECRET,
     resave: false,
     saveUninitialized: false
 }))
+app.set('trust proxy', 1);
 app.use(passport.initialize())
 app.use(passport.session())
 
