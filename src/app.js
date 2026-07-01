@@ -5,6 +5,7 @@ import session from "express-session"
 import passport from "./config/passport.js"
 
 const app = express()
+app.set('trust proxy', 1);
 
 app.use(express.json())
 
@@ -15,7 +16,6 @@ app.use(session({
     resave: false,
     saveUninitialized: false
 }))
-app.set('trust proxy', 1);
 app.use(passport.initialize())
 app.use(passport.session())
 
