@@ -19,6 +19,11 @@ app.use(session({
 app.use(passport.initialize())
 app.use(passport.session())
 
+app.use(cors({
+    origin: ["http://localhost:5173", "https://tera-netlify-url.netlify.app"],
+    credentials: true
+}))
+
 app.get('/', (req, res) => {
     res.send('Api is running')
 })
