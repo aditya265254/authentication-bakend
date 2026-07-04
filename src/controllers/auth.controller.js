@@ -44,7 +44,7 @@ export const googleCallback = asyncHandler(async (req, res) => {
         { expiresIn: process.env.JWT_EXPIRY }
     )
     
-    return res.status(200).json(
-        new ApiResponse(200, { user: req.user, token }, "Google login successful")
-    )
+  return res.redirect(
+    `http://localhost:5173/dashboard?token=${token}&user=${JSON.stringify(req.user)}`
+)
 })
