@@ -44,7 +44,9 @@ export const googleCallback = asyncHandler(async (req, res) => {
         { expiresIn: process.env.JWT_EXPIRY }
     )
     
-  return res.redirect(
-    `http://localhost:5173/dashboard?token=${token}&user=${JSON.stringify(req.user)}`
+const frontendURL = process.env.FRONTEND_URL || "http://localhost:5173"
+
+return res.redirect(
+    `${frontendURL}/dashboard?token=${token}&user=${JSON.stringify(req.user)}`
 )
 })
