@@ -1,21 +1,21 @@
- import nodemailer from "nodemailer"
+import nodemailer from "nodemailer"
 
 const sendVerificationEmail = async (email, token) => {
     try {
         
         const transporter = nodemailer.createTransport({
-            service: "gmail",
+            host: 'smtp.gmail.com',   
+            port: 587,                 
+            secure: false,           
             auth: {
                 user: process.env.EMAIL_USER,
                 pass: process.env.EMAIL_PASS
             }
         });
 
-      
         const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
         const verificationLink = `${frontendUrl}/verify-email?token=${token}`;
 
-        
         const mailOptions = {
             from: process.env.EMAIL_USER,
             to: email,
@@ -28,9 +28,8 @@ const sendVerificationEmail = async (email, token) => {
             `
         };
 
-    
         await transporter.sendMail(mailOptions);
-        console.log("Email successfully sent!");
+        console.log("Email successfully sent!")
 
     } catch (error) {
         console.error("Email send karne me dikkat aayi:", error);
@@ -38,6 +37,4 @@ const sendVerificationEmail = async (email, token) => {
     }
 };
 
-
 export default sendVerificationEmail;
-
