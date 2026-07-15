@@ -1,7 +1,7 @@
 import { Router } from "express";
-import { logIn, signUp, googleCallback, adminSignUp, getAllUsers } from "../controllers/auth.controller.js";
+import { logIn, signUp, googleCallback, adminSignUp, getAllUsers, verifyEmail } from "../controllers/auth.controller.js";
 import passport from "../config/passport.js";
-import { verifyToken } from "../middlewares/auth.middleware.js";
+import { isAdmin, verifyToken } from "../middlewares/auth.middleware.js";
 
 
 
@@ -15,5 +15,6 @@ router.get("/google/callback", passport.authenticate("google", { failureRedirect
 // admin section 
 
 router.route("/admin/signup").post(adminSignUp)
-router.route("/admin/dashbord").get(verifyToken, getAllUsers)
+router.route("/admin/dashbord").get(verifyToken, isAdmin, getAllUsers)
+router.route("/verify-email").get(verifyEmail);
 export default router;
