@@ -4,20 +4,22 @@ const sendVerificationEmail = async (email, token) => {
     try {
         
         const transporter = nodemailer.createTransport({
-            host: 'smtp.gmail.com',   
-            port: 587,                 
-            secure: false,           
+            host: 'smtp-relay.brevo.com',
+            port: 587,
+            secure: false,
             auth: {
                 user: process.env.EMAIL_USER,
                 pass: process.env.EMAIL_PASS
             }
-        });
+        })
+        console.log("EMAIL_USER:", process.env.EMAIL_USER)
+        console.log("EMAIL_FROM:", process.env.EMAIL_FROM)
 
         const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
         const verificationLink = `${frontendUrl}/verify-email?token=${token}`;
 
         const mailOptions = {
-            from: process.env.EMAIL_USER,
+            from: `"Auth App" <${process.env.EMAIL_FROM}>`,  // ← Verified Gmail
             to: email,
             subject: "Email Verification Required",
             html: `
