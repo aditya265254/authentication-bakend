@@ -7,30 +7,41 @@ import crypto from "crypto";
 import sendVerificationEmail from "../utils/sendEmail.js";
 
 export const signUp = asyncHandler(async (req, res) => {
-  const { fullName, email, password } = req.body;
-  const existingEmail = await User.findOne({ email });
-  if (existingEmail) {
-    throw new ApiError(409, "Email alredy exist in data base");
-  }
-  const token = crypto.randomBytes(32).toString("hex");
+    const { fullName, email, password } = req.body;
+    
+    
+    const existingEmail = await User.findOne({ email });
+    if (existingEmail) {
+        throw new ApiError(409, "Email already exists in database");
+    }
 
-  const newUser = await User.create({
-    fullName,
-    email,
-    password,
-    verificationToken: token,
-  });
-  await sendVerificationEmail(newUser.email, token);
+   
+    const token = crypto.randomBytes(32).toString("hex");
 
-  return res
-    .status(201)
-    .json(
-      new ApiResponse(
-        201,
-        null,
-        "Registration successful! Please check your email to verify your account.",
-      ),
-    );
+    
+    const newUser = await User.create({
+        fullName, 
+        email,
+        password,
+        verificationToken: token
+    });
+
+    try {
+
+        await sendVerificationEmail(newUser.email, token);
+     
+        return res.status(201).json(
+            new ApiResponse(201, null, "Registration successful! Please check your email to verify your account.")
+        );
+    } catch (mailError) {
+        console.error("error in sending mail:", mailError);
+        
+      
+        await User.findByIdAndDelete(newUser._id);
+        
+        
+        throw new ApiError(500, "Failed to send verification email. Please try again later.");
+    }
 });
 
 export const logIn = asyncHandler(async (req, res) => {
