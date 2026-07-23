@@ -105,3 +105,65 @@ export const getAllPosts = asyncHandler(async (req, res) => {
         .status(200)
         .json(new ApiResponse(200, posts, "Posts fetched successfully"))
 })
+
+export const softDeletePost = asyncHandler(async (req, res) => {
+const { postId, reason } = req.body  
+
+if (!postId) {
+    throw new ApiError(400, "Invalid post ID")
+}
+
+const post = await PostModel.findById(postId)  
+
+if (!post) {
+    throw new ApiError(404, "Post not found")
+}
+
+const updatedPost = await PostModel.findByIdAndUpdate(
+    postId,
+    {
+        isSoftDeleted: !post.isSoftDeleted,  
+        deletedByReason: !post.isSoftDeleted ? reason : "" 
+    },
+    { new: true }
+)
+
+return res.status(200).json(
+    new ApiResponse(200, updatedPost, 
+        updatedPost.isSoftDeleted ? "Post soft deleted" : "Post restored"
+    )
+)
+})
+
+
+export const appealPost = asyncHandler(async (req, res) => {
+    const { postId, userClarification } = req.body
+
+    if (!postId) {
+        throw new ApiError(400, "Post ID required")
+    }
+
+    if (!userClarification || userClarification === "") {
+        throw new ApiError(400, "Appeal can't be empty")
+    }
+
+    const post = await PostModel.findById(postId)  
+
+    if (!post) {
+        throw new ApiError(404, "Post not found")
+    }
+
+    if (!post.isSoftDeleted) {  
+        throw new ApiError(400, "You can't apeal because post is not soft deleted by admin")
+    }
+
+    const updatedPost = await PostModel.findByIdAndUpdate( 
+        postId,
+        { userClarification: userClarification },  
+        { new: true }
+    )
+
+    return res.status(200).json(
+        new ApiResponse(200, updatedPost, "Appeal submit admin respond soon")
+    )
+})
