@@ -1,9 +1,9 @@
-import {mongoose} from "mongoose"
+import mongoose from "mongoose"
 
 const postSchema = new mongoose.Schema({
     user: {
-        type: mongoose.Schema.types.objectId,
-        reg: "User",
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
         required: true,
     },
     content: {
@@ -15,17 +15,17 @@ const postSchema = new mongoose.Schema({
         type: String,
         default: ""
     },
-    cloudnaryPublicId: {
+    cloudinaryPublicId: {
         type: String,
         default: ''
     },
-    like: [{
-        type: mongoose.Schema.types.objectId,
+    likes: [{
+        type: mongoose.Schema.Types.ObjectId,
         ref: "User"
     }],
     comments: [{
         user: {
-            type: mongoose.Schema.types.objectId,
+            type: mongoose.Schema.Types.ObjectId,
             ref: "User",
             required: true,
         },
@@ -37,7 +37,8 @@ const postSchema = new mongoose.Schema({
             type: Date,
             default: Date.now
         },
-        sharesCount: {
+    }],
+    sharesCount: {
             type: Number,
             default: 0,
         },
@@ -45,16 +46,14 @@ const postSchema = new mongoose.Schema({
             type: Boolean,
             default: false,
         },
-        deletedByReson: {
+        deletedByReason: {
             type: String,
             default: ''
         },
-        userClerification: {
+        userClarification: {
             type: String,
-            default: true
+            default: ''
         }
-
-    }]
 
     
 }, {timestamps: true})
