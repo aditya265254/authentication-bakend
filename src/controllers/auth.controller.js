@@ -16,35 +16,32 @@ export const signUp = asyncHandler(async (req, res) => {
     }
 
    
-    // const token = crypto.randomBytes(32).toString("hex");
+    const token = crypto.randomBytes(32).toString("hex");
 
     
     const newUser = await User.create({
         fullName, 
         email,
         password,
-        
+        verificationToken: token
     });
 
-    // try {
+    try {
 
-    //     await sendVerificationEmail(newUser.email, token);
+        await sendVerificationEmail(newUser.email, token);
      
-    //     return res.status(201).json(
-    //         new ApiResponse(201, null, "Registration successful! Please check your email to verify your account.")
-    //     );
-    // } catch (mailError) {
-    //     console.error("error in sending mail:", mailError);
+        return res.status(201).json(
+            new ApiResponse(201, null, "Registration successful! Please check your email to verify your account.")
+        );
+    } catch (mailError) {
+        console.error("error in sending mail:", mailError);
         
       
-    //     await User.findByIdAndDelete(newUser._id);
+        await User.findByIdAndDelete(newUser._id);
         
         
-    //     throw new ApiError(500, "Failed to send verification email. Please try again later.");
-    // }
-    return res.status(201).json(
-        new ApiResponse(201, newUser, "Registration successful")
-    );
+        throw new ApiError(500, "Failed to send verification email. Please try again later.");
+    }
 });
 
 export const logIn = asyncHandler(async (req, res) => {
