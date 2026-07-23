@@ -1,9 +1,9 @@
 import express from "express"
 import connectDB from "./db/index.js"
-import authRouter from "./routes/auth.routes.js"
 import session from "express-session"
 import passport from "./config/passport.js"
 import cors from "cors"
+import { IndexRouter } from "./routes/index.routes.js"
 
 const app = express()
 app.set('trust proxy', 1);
@@ -32,7 +32,9 @@ app.get('/', (req, res) => {
     res.send('Api is running')
 })
 
-app.use("/api/auth", authRouter)
+
+app.use("/api/v1", IndexRouter)
+
 app.use((err, req, res, next) => {
     const statusCode = err.statusCode || 500
     const message = err.message || "Something went wrong"
