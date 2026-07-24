@@ -167,3 +167,64 @@ export const appealPost = asyncHandler(async (req, res) => {
         new ApiResponse(200, updatedPost, "Appeal submit admin respond soon")
     )
 })
+
+
+
+export const updatePost = asyncHandler(async (req, res) => {
+    const { postId } = req.params
+    const { content, removeImage } = req.body
+    const localFilePath = req.file?.path
+
+    const post = await PostModel.findById(postId)
+    if (!post) throw new ApiError(404, "Post not found")
+
+    if (post.user.toString() !== req.user._id.toString()) {
+        throw new ApiError(403, "You are not authorized to update this post")
+    }
+
+    const updateFields = {}
+
+   
+    if (content) updateFields.content = content
+
+   
+    if (removeImage === "true" && post.cloudinaryPublicId) {
+        try {
+            await cloudinary.uploader.destroy(post.cloudinaryPublicId)
+        } catch (error) {
+            throw new ApiError(500, "Image delete failed, try again")
+        }
+        updateFields.imageUrl = ""
+        updateFields.cloudinaryPublicId = ""
+    }
+
+    
+    if (localFilePath) {
+  
+        if (post.cloudinaryPublicId) {
+            try {
+                await cloudinary.uploader.destroy(post.cloudinaryPublicId)
+            } catch (error) {
+                throw new ApiError(500, "Old image delete failed")
+            }
+        }
+ 
+        const uploaded = await uploadOnCloudinary(localFilePath)
+        if (!uploaded) throw new ApiError(500, "Image upload failed")
+
+        updateFields.imageUrl = uploaded.secure_url
+        updateFields.cloudinaryPublicId = uploaded.public_id
+    }
+
+    const updatedPost = await PostModel.findByIdAndUpdate(
+        postId,
+        updateFields,
+        { new: true }
+    )
+
+    return res.status(200).json(
+        new ApiResponse(200, updatedPost, "Post updated successfully")
+    )
+})
+
+
