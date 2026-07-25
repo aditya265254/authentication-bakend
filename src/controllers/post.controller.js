@@ -4,6 +4,7 @@ import { ApiResponse } from "../utils/ApiResponse.js";
 import { v2 as cloudinary } from 'cloudinary';
 import { uploadOnCloudinary } from "../utils/cloudinaryService.js";
 import PostModel from "../models/post.model.js"
+import mongoose from "mongoose";
 
 export const createPost = asyncHandler(async (req, res) => {
     const { content } = req.body;
@@ -254,4 +255,79 @@ export const updatePost = asyncHandler(async (req, res) => {
     )
 })
 
+export const adminHardDelete = asyncHandler(async (req, res) => {
+    const { postId } = req.params
+
+    const post = await PostModel.findById(postId)
+    if (!post) throw new ApiError(404, "Post not found")
+
+    if (post.cloudinaryPublicId) {
+        try {
+            await cloudinary.uploader.destroy(post.cloudinaryPublicId)
+        } catch (error) {
+            throw new ApiError(500, "Image delete failed")
+        }
+    }
+
+    await PostModel.findByIdAndDelete(postId)
+
+    return res.status(200).json(
+        new ApiResponse(200, {}, "Post permanently deleted")
+    )
+})
+
+
+export const likePost = asyncHandler(async (req, res) => {
+    const { postId } = req.params;
+    const userId = req.user._id;
+
+    const post = await PostModel.findById(postId);
+    if (!post) throw new ApiError(404, "Post not found");
+
+    const isLiked = post.likes.includes(userId);
+
+    if (isLiked) {
+        await PostModel.findByIdAndUpdate(postId, {
+            $pull: { likes: userId }
+        });
+    } else {
+
+        await PostModel.findByIdAndUpdate(postId, {
+            $addToSet: { likes: userId }
+        });
+    }
+
+
+    const result = await PostModel.aggregate([
+
+        { 
+            $match: { 
+                _id: new mongoose.Types.ObjectId(postId) 
+            } 
+        },
+
+
+        { 
+            $project: {
+                content: 1,
+                imageUrl: 1,
+                likesCount: { $size: "$likes" },
+                isLiked: { $in: [new mongoose.Types.ObjectId(userId), "$likes"] }
+            }
+        }
+    ]);
+
+
+    if (!result.length) {
+        throw new ApiError(500, "Failed to fetch updated post data");
+    }
+
+    return res.status(200).json(
+        new ApiResponse(
+            200, 
+            result[0], 
+            isLiked ? "Post unliked successfully" : "Post liked successfully"
+        )
+    );
+});
 
