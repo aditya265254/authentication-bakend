@@ -107,7 +107,8 @@ export const getAllPosts = asyncHandler(async (req, res) => {
 })
 
 export const softDeletePost = asyncHandler(async (req, res) => {
-const { postId, reason } = req.body  
+const {postId} = req.params
+const { reason } = req.body  
 
 if (!postId) {
     throw new ApiError(400, "Invalid post ID")
@@ -119,25 +120,27 @@ if (!post) {
     throw new ApiError(404, "Post not found")
 }
 
-const updatedPost = await PostModel.findByIdAndUpdate(
-    postId,
-    {
-        isSoftDeleted: !post.isSoftDeleted,  
-        deletedByReason: !post.isSoftDeleted ? reason : "" 
-    },
-    { new: true }
-)
+ if (post.isSoftDeleted) {
+        throw new ApiError(400, "Post already soft deleted")
+    }
 
-return res.status(200).json(
-    new ApiResponse(200, updatedPost, 
-        updatedPost.isSoftDeleted ? "Post soft deleted" : "Post restored"
+    const updatedPost = await PostModel.findByIdAndUpdate(
+        postId,
+        {
+            isSoftDeleted: true,        
+            deletedByReason: reason
+        },
+        { new: true }
     )
-)
+
+    return res.status(200).json(
+        new ApiResponse(200, updatedPost, "Post soft deleted successfully")
+    )
 })
 
-
 export const appealPost = asyncHandler(async (req, res) => {
-    const { postId, userClarification } = req.body
+    const {postId } = req.params
+    const { userClarification } = req.body
 
     if (!postId) {
         throw new ApiError(400, "Post ID required")
@@ -169,6 +172,30 @@ export const appealPost = asyncHandler(async (req, res) => {
 })
 
 
+export const restorePost = asyncHandler(async (req, res) => {
+    const { postId } = req.params
+
+    const post = await PostModel.findById(postId)
+    if (!post) throw new ApiError(404, "Post not found")
+
+    if (!post.isSoftDeleted) {
+        throw new ApiError(400, "Post already active h")
+    }
+
+    const updatedPost = await PostModel.findByIdAndUpdate(
+        postId,
+        {
+            isSoftDeleted: false,
+            deletedByReason: "",
+            userClarification: ""
+        },
+        { new: true }
+    )
+
+    return res.status(200).json(
+        new ApiResponse(200, updatedPost, "Post restored successfully")
+    )
+})
 
 export const updatePost = asyncHandler(async (req, res) => {
     const { postId } = req.params
