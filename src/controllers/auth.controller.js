@@ -5,6 +5,7 @@ import { ApiResponse } from "../utils/ApiResponse.js";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
 import sendVerificationEmail from "../utils/sendEmail.js";
+import Post from "../models/post.model.js";
 
 export const signUp = asyncHandler(async (req, res) => {
     const { fullName, email, password } = req.body;
@@ -112,12 +113,6 @@ export const adminSignUp = asyncHandler(async (req, res) => {
     .json(new ApiResponse(201, createdAdmin, "Admin registered Sucessfully"));
 });
 
-export const getAllUsers = asyncHandler(async (req, res) => {
-  const user = await User.find({}).select("-password");
-  return res
-    .status(200)
-    .json(new ApiResponse(200, user, "all data fetch sucessfully"));
-});
 
 export const verifyEmail = asyncHandler(async (req, res) => {
    
@@ -143,4 +138,28 @@ export const verifyEmail = asyncHandler(async (req, res) => {
     return res
         .status(200)
         .json(new ApiResponse(200, null, "Email verified successfully! You can now log in."));
+});
+
+
+export const getAdminDashboardData = asyncHandler(async (req, res) => {
+  
+    const [users, totalPosts, pendingAppeals] = await Promise.all([
+        User.find().select("-password").lean(),
+        Post.countDocuments(),
+        Post.find({ 
+            isSoftDeleted: true, 
+            userClarification: { $exists: true, $ne: "" } 
+        }).populate("user", "fullName email").lean()
+    ]);
+
+    const totalUsers = users.length;
+
+    return res.status(200).json(
+        new ApiResponse(200, {
+            users,
+            totalUsers,
+            totalPosts,
+            pendingAppeals
+        }, "Admin dashboard data fetched successfully")
+    );
 });
