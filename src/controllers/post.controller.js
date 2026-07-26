@@ -331,3 +331,54 @@ export const likePost = asyncHandler(async (req, res) => {
     );
 });
 
+
+export const commentPOst = asyncHandler(async (req, res)=> {
+    const {postId} = req.params
+    const userId = req.user._id
+    const {content} = req.body
+
+     if(!content || content.trim() === ""){
+        throw new ApiError(400, "comment text is required")
+     }
+
+     const post = await PostModel.findById(postId)
+     if(!post){
+        throw new ApiError(404, "Post not found")
+     }
+
+     const updatedPost = await PostModel.findByIdAndUpdate(
+        postId, 
+        {
+            $push:{
+                comments: {
+                    user: userId,
+                    text: content.trim()
+                }
+
+     }
+    },
+    {new: true}
+).populate("comments.user", "username avatar");
+
+return res
+        .status(201)
+        .json(new ApiResponse(201, updatedPost, "Comment added successfully"));
+
+})
+
+export const sharePost = asyncHandler(async (req, res) => {
+    const { postId } = req.params
+    
+    const post = await PostModel.findById(postId)
+    if (!post) throw new ApiError(404, "Post not found")
+    
+    const updatedPost = await PostModel.findByIdAndUpdate(
+        postId,
+        { $inc: { sharesCount: 1 } },  
+        { new: true }
+    )
+    
+    return res.status(200).json(
+        new ApiResponse(200, updatedPost, "Post shared successfully")
+    )
+})
