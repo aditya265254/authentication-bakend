@@ -403,3 +403,27 @@ export const getAdminUserPosts = asyncHandler(async (req, res) => {
         .status(200)
         .json(new ApiResponse(200, posts, "User posts fetched for admin successfully"));
 });
+
+
+export const getAdminDashboardData = asyncHandler(async (req, res) => {
+  
+    const [users, totalPosts, pendingAppeals] = await Promise.all([
+        UserModel.find().select("-password").lean(),
+        PostModel.countDocuments(),
+        PostModel.find({ 
+            isSoftDeleted: true, 
+            userClarification: { $exists: true, $ne: "" } 
+        }).populate("user", "fullName email").lean()
+    ]);
+
+    const totalUsers = users.length;
+
+    return res.status(200).json(
+        new ApiResponse(200, {
+            users,
+            totalUsers,
+            totalPosts,
+            pendingAppeals
+        }, "Admin dashboard data fetched successfully")
+    );
+});
