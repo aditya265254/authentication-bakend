@@ -358,7 +358,7 @@ export const commentPOst = asyncHandler(async (req, res)=> {
      }
     },
     {new: true}
-).populate("comments.user", "username avatar");
+).populate("comments.user", "userName, email");
 
 const newComment = updatedPost.comments[updatedPost.comments.length - 1]
 
