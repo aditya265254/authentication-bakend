@@ -360,9 +360,11 @@ export const commentPOst = asyncHandler(async (req, res)=> {
     {new: true}
 ).populate("comments.user", "username avatar");
 
+const newComment = updatedPost.comments[updatedPost.comments.length - 1]
+
 return res
         .status(201)
-        .json(new ApiResponse(201, updatedPost, "Comment added successfully"));
+        .json(new ApiResponse(201, newComment, "Comment added successfully"));
 
 })
 
@@ -374,9 +376,9 @@ export const sharePost = asyncHandler(async (req, res) => {
     
     const updatedPost = await PostModel.findByIdAndUpdate(
         postId,
-        { $inc: { sharesCount: 1 } },  
-        { new: true }
-    )
+    { $inc: { sharesCount: 1 } },
+    { new: true }
+).select("content imageUrl sharesCount likes comments")
     
     return res.status(200).json(
         new ApiResponse(200, updatedPost, "Post shared successfully")
