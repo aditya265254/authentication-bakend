@@ -94,19 +94,20 @@ export const deletPost = asyncHandler(async (req, res) => {
 });
 
 export const getAllPosts = asyncHandler(async (req, res) => {
-    const posts = await PostModel.find()
+   
+    const posts = await PostModel.find({ isSoftDeleted: { $ne: true } })
         .populate("user", "fullName email")
         .populate("comments.user", "fullName email")
-        .sort({ createdAt: -1 })
+        .sort({ createdAt: -1 });
 
     if (!posts || posts.length === 0) {
-        throw new ApiError(404, "No posts available")
+        throw new ApiError(404, "No posts available");
     }
 
     return res
         .status(200)
-        .json(new ApiResponse(200, posts, "Posts fetched successfully"))
-})
+        .json(new ApiResponse(200, posts, "Posts fetched successfully"));
+});
 
 export const softDeletePost = asyncHandler(async (req, res) => {
 const {postId} = req.params
@@ -385,3 +386,20 @@ export const sharePost = asyncHandler(async (req, res) => {
         new ApiResponse(200, updatedPost, "Post shared successfully")
     )
 })
+
+export const getAdminUserPosts = asyncHandler(async (req, res) => {
+    const { userId } = req.params;
+
+    if (!userId || !userId.match(/^[0-9a-fA-F]{24}$/)) {
+        throw new ApiError(400, "Invalid user ID provided");
+    }
+
+   
+    const posts = await PostModel.find({ user: userId })
+        .populate("user", "fullName email")
+        .sort({ createdAt: -1 });
+
+    return res 
+        .status(200)
+        .json(new ApiResponse(200, posts, "User posts fetched for admin successfully"));
+});

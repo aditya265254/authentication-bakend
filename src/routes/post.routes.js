@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { adminHardDelete, appealPost, commentPOst, createPost, deletPost, getAllPosts, getUserPost, likePost, restorePost, sharePost, softDeletePost, updatePost } from "../controllers/post.controller.js";
+import { adminHardDelete, appealPost, commentPOst, createPost, deletPost, getAdminUserPosts, getAllPosts, getUserPost, likePost, restorePost, sharePost, softDeletePost, updatePost } from "../controllers/post.controller.js";
 import { isAdmin, verifyToken } from "../middlewares/auth.middleware.js";
 import { upload } from '../middlewares/multer.middleware.js'
 
@@ -17,6 +17,7 @@ router.route("/admin/delete/:postId").delete(verifyToken, isAdmin, adminHardDele
 router.route("/like/:postId").patch(verifyToken, likePost)
 router.route("/comment/:postId").patch(verifyToken, commentPOst)
 router.route("/share/:postId").patch(verifyToken, sharePost)
+router.route("/admin/user-post/:userId").get(verifyToken, isAdmin, getAdminUserPosts)
 
 export default router;
 
