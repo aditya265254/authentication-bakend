@@ -96,6 +96,7 @@ export const deletPost = asyncHandler(async (req, res) => {
 export const getAllPosts = asyncHandler(async (req, res) => {
     const posts = await PostModel.find()
         .populate("user", "fullName email")
+        .populate("comments.user", "fullName email")
         .sort({ createdAt: -1 })
 
     if (!posts || posts.length === 0) {
@@ -358,7 +359,7 @@ export const commentPOst = asyncHandler(async (req, res)=> {
      }
     },
     {new: true}
-).populate("comments.user", "userName, email");
+).populate("comments.user", "userName email");
 
 const newComment = updatedPost.comments[updatedPost.comments.length - 1]
 
