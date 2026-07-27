@@ -16,6 +16,8 @@ import {
 } from "../controllers/post.controller.js";
 import { isAdmin, verifyToken } from "../middlewares/auth.middleware.js";
 import { upload } from "../middlewares/multer.middleware.js";
+import { limiter } from "../middlewares/ratelimit.middleware.js";
+
 
 const router = Router();
 
@@ -34,7 +36,7 @@ router
 router
   .route("/admin/delete/:postId")
   .delete(verifyToken, isAdmin, adminHardDelete);
-router.route("/like/:postId").patch(verifyToken, likePost);
+router.route("/like/:postId").patch(verifyToken, limiter, likePost);
 router.route("/comment/:postId").patch(verifyToken, commentPOst);
 router.route("/share/:postId").patch(verifyToken, sharePost);
 router
