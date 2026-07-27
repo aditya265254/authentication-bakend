@@ -249,4 +249,3 @@ pnpm start
 ## 📄 License & Author
 
 - **Author**: Aditya Singh
-- **License**: MIT
