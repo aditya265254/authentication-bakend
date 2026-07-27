@@ -1,6 +1,7 @@
 # 🛠️ Postify Backend — RESTful API Engine
 
 ![Node.js](https://img.shields.io/badge/Node.js-v18+-339933?style=for-the-badge&logo=nodedotjs&logoColor=white)
+![pnpm](https://img.shields.io/badge/pnpm-%3E%3D8.0-F69220?style=for-the-badge&logo=pnpm&logoColor=white)
 ![Express](https://img.shields.io/badge/Express.js-4.x-000000?style=for-the-badge&logo=express&logoColor=white)
 ![MongoDB](https://img.shields.io/badge/MongoDB-Atlas-47A248?style=for-the-badge&logo=mongodb&logoColor=white)
 ![JWT](https://img.shields.io/badge/JWT-Authentication-000000?style=for-the-badge&logo=jsonwebtokens&logoColor=white)
@@ -108,7 +109,8 @@ authBackend/
 │   └── server.js                   # Application bootstrap entry point
 ├── .env.example                    # Environment variables template
 ├── .gitignore                      # Git exclusion rules
-└── package.json                    # Project dependencies and npm scripts
+├── package.json                    # Project dependencies and scripts
+└── pnpm-lock.yaml                  # pnpm lockfile
 ```
 
 ---
@@ -223,21 +225,23 @@ All API errors return a consistent JSON response structure powered by the `ApiEr
 
 ## 🚦 Getting Started & Local Development
 
+> ⚡ **Package Manager**: This project uses **`pnpm`** for faster dependency installation, disk efficiency, and better performance.
+
 ```bash
 # 1. Clone & navigate to backend directory
 cd authBackend
 
-# 2. Install dependencies
-npm install
+# 2. Install dependencies using pnpm
+pnpm install
 
 # 3. Create .env file from template
 cp .env.example .env
 
 # 4. Run development server (Nodemon)
-npm run dev
+pnpm run dev
 
 # 5. Production start
-npm start
+pnpm start
 ```
 
 ---
