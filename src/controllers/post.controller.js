@@ -5,6 +5,7 @@ import { v2 as cloudinary } from 'cloudinary';
 import { uploadOnCloudinary } from "../utils/cloudinaryService.js";
 import PostModel from "../models/post.model.js"
 import mongoose from "mongoose";
+import redisClient from '../config/redis.js';
 
 export const createPost = asyncHandler(async (req, res) => {
     const { content } = req.body;
@@ -35,6 +36,7 @@ export const createPost = asyncHandler(async (req, res) => {
             cloudinaryPublicId: cloudinaryResponse?.public_id || ""
         });
 
+        await redisClient.del("feed:posts");
         return res
             .status(201)
             .json(new ApiResponse(201, newPost, "Post created Successfully"));
@@ -63,7 +65,7 @@ export const getUserPost = asyncHandler(async (req, res) => {
     .json(new ApiResponse(200, posts, "User post fetch Sucessfully" ))
 })
 
-export const deletPost = asyncHandler(async (req, res) => {
+export const deletePost = asyncHandler(async (req, res) => {
     const {postId} = req.params;
     const userId = req.user?._id;
 
@@ -94,19 +96,38 @@ export const deletPost = asyncHandler(async (req, res) => {
 });
 
 export const getAllPosts = asyncHandler(async (req, res) => {
-   
-    const posts = await PostModel.find({ isSoftDeleted: { $ne: true } })
-        .populate("user", "fullName email")
-        .populate("comments.user", "fullName email")
-        .sort({ createdAt: -1 });
+    const cacheKey = "feed:posts";
 
-    if (!posts || posts.length === 0) {
-        throw new ApiError(404, "No posts available");
+    try {
+  
+        const cachedFeed = await redisClient.get(cacheKey);
+
+        if (cachedFeed) {
+            console.log("⚡ Serving feed from Redis Cache (Super Fast!)");
+            return res.status(200).json(
+                new ApiResponse(200, JSON.parse(cachedFeed), "Posts fetched successfully from cache")
+            );
+        }
+
+        const posts = await PostModel.find({ isSoftDeleted: { $ne: true } })
+            .populate("user", "fullName email")
+            .populate("comments.user", "fullName email")
+            .sort({ createdAt: -1 });
+
+        if (!posts || posts.length === 0) {
+            throw new ApiError(404, "No posts available");
+        }
+
+        
+        await redisClient.setEx(cacheKey, 60, JSON.stringify(posts));
+
+        return res
+            .status(200)
+            .json(new ApiResponse(200, posts, "Posts fetched successfully from DB"));
+
+    } catch (error) {
+        throw new ApiError(error.statusCode || 500, error.message || "Failed to fetch feed");
     }
-
-    return res
-        .status(200)
-        .json(new ApiResponse(200, posts, "Posts fetched successfully"));
 });
 
 export const softDeletePost = asyncHandler(async (req, res) => {
@@ -279,62 +300,57 @@ export const adminHardDelete = asyncHandler(async (req, res) => {
 })
 
 
+
 export const likePost = asyncHandler(async (req, res) => {
     const { postId } = req.params;
-    const userId = req.user._id;
+    const userId = req.user._id.toString(); 
 
+   
     const post = await PostModel.findById(postId);
-    if (!post) throw new ApiError(404, "Post not found");
+    if (!post) {
+        throw new ApiError(404, "Post not found");
+    }
 
-    const isLiked = post.likes.includes(userId);
+   
+    const likedUsersKey = `post:${postId}:liked_users`; 
 
-    if (isLiked) {
-        await PostModel.findByIdAndUpdate(postId, {
-            $pull: { likes: userId }
-        });
+    
+    const hasLiked = await redisClient.sIsMember(likedUsersKey, userId);
+
+    let isLiked = false;
+
+    if (hasLiked) {
+      
+        await redisClient.sRem(likedUsersKey, userId);
+        isLiked = false;
     } else {
-
-        await PostModel.findByIdAndUpdate(postId, {
-            $addToSet: { likes: userId }
-        });
+      
+        await redisClient.sAdd(likedUsersKey, userId);
+        isLiked = true;
     }
 
+   
+    const currentLikesCount = await redisClient.sCard(likedUsersKey);
 
-    const result = await PostModel.aggregate([
-
-        { 
-            $match: { 
-                _id: new mongoose.Types.ObjectId(postId) 
-            } 
-        },
-
-
-        { 
-            $project: {
-                content: 1,
-                imageUrl: 1,
-                likesCount: { $size: "$likes" },
-                isLiked: { $in: [new mongoose.Types.ObjectId(userId), "$likes"] }
-            }
-        }
-    ]);
-
-
-    if (!result.length) {
-        throw new ApiError(500, "Failed to fetch updated post data");
-    }
+ 
+    await redisClient.sAdd('modified:posts', postId);
 
     return res.status(200).json(
         new ApiResponse(
-            200, 
-            result[0], 
-            isLiked ? "Post unliked successfully" : "Post liked successfully"
+            200,
+            {
+                content: post.content,
+                imageUrl: post.imageUrl,
+                likesCount: currentLikesCount,
+                isLiked: isLiked
+            },
+            isLiked ? "Post liked successfully" : "Post unliked successfully"
         )
     );
 });
 
 
-export const commentPOst = asyncHandler(async (req, res)=> {
+export const commentPost = asyncHandler(async (req, res)=> {
     const {postId} = req.params
     const userId = req.user._id
     const {content} = req.body

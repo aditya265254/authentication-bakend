@@ -4,6 +4,7 @@ import session from "express-session"
 import passport from "./config/passport.js"
 import cors from "cors"
 import { IndexRouter } from "./routes/index.routes.js"
+import { startLikeSyncWorker } from "./services/syncService.js"
 
 const app = express()
 app.set('trust proxy', 1);
@@ -32,6 +33,7 @@ app.get('/', (req, res) => {
     res.send('Api is running')
 })
 
+startLikeSyncWorker();
 
 app.use("/api/v1", IndexRouter)
 

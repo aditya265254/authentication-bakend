@@ -2,9 +2,9 @@ import { Router } from "express";
 import {
   adminHardDelete,
   appealPost,
-  commentPOst,
+  commentPost,
   createPost,
-  deletPost,
+  deletePost,
   getAdminUserPosts,
   getAllPosts,
   getUserPost,
@@ -18,12 +18,11 @@ import { isAdmin, verifyToken } from "../middlewares/auth.middleware.js";
 import { upload } from "../middlewares/multer.middleware.js";
 import { redisRateLimiter } from "../middlewares/ratelimit.middleware.js";
 
-
 const router = Router();
 
 router.route("/create").post(verifyToken, upload.single("image"), createPost);
 router.route("/my-posts").get(verifyToken, getUserPost);
-router.route("/delet/:postId").delete(verifyToken, deletPost);
+router.route("/delet/:postId").delete(verifyToken, deletePost);
 router.route("/feed").get(getAllPosts);
 router
   .route("/soft-delete/:postId")
@@ -36,8 +35,10 @@ router
 router
   .route("/admin/delete/:postId")
   .delete(verifyToken, isAdmin, adminHardDelete);
-router.route("/like/:postId").patch(verifyToken, redisRateLimiter(5,60), likePost);
-router.route("/comment/:postId").patch(verifyToken, commentPOst);
+router
+  .route("/like/:postId")
+  .patch(verifyToken, redisRateLimiter(5, 60), likePost);
+router.route("/comment/:postId").patch(verifyToken, commentPost);
 router.route("/share/:postId").patch(verifyToken, sharePost);
 router
   .route("/admin/user-post/:userId")
