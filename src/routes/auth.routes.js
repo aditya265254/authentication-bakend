@@ -1,6 +1,7 @@
 import { Router } from "express";
 import {
   logIn,
+  logOut,
   signUp,
   googleCallback,
   adminSignUp,
@@ -15,6 +16,7 @@ const router = Router();
 
 router.route("/signup").post(signUp);
 router.route("/login").post(loginRateLimiter(5, 300) ,logIn);
+router.route("/logout").post(verifyToken, logOut);
 router.get(
   "/google",
   passport.authenticate("google", { scope: ["profile", "email"] }),

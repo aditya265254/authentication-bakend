@@ -6,6 +6,7 @@ import jwt from "jsonwebtoken";
 import crypto from "crypto";
 import sendVerificationEmail from "../utils/sendEmail.js";
 import Post from "../models/post.model.js";
+import redisClient from "../config/redis.js";
 
 export const signUp = asyncHandler(async (req, res) => {
     const { fullName, email, password } = req.body;
@@ -67,6 +68,21 @@ export const logIn = asyncHandler(async (req, res) => {
     process.env.JWT_SECRET,
     { expiresIn: process.env.JWT_EXPIRY },
   );
+
+  // Cache user session in Redis (7 days TTL)
+  const sessionData = {
+    _id: userFind._id.toString(),
+    fullName: userFind.fullName,
+    email: userFind.email,
+    role: userFind.role,
+    isVerified: userFind.isVerified,
+  };
+  await redisClient.setEx(
+    `user:session:${userFind._id.toString()}`,
+    604800,
+    JSON.stringify(sessionData)
+  );
+
   userFind.password = undefined;
   return res
     .status(200)
@@ -80,9 +96,41 @@ export const googleCallback = asyncHandler(async (req, res) => {
     { expiresIn: process.env.JWT_EXPIRY },
   );
 
+  // Cache Google user session in Redis (7 days TTL)
+  const sessionData = {
+    _id: req.user._id.toString(),
+    fullName: req.user.fullName,
+    email: req.user.email,
+    role: req.user.role,
+    isVerified: req.user.isVerified || true,
+  };
+  await redisClient.setEx(
+    `user:session:${req.user._id.toString()}`,
+    604800,
+    JSON.stringify(sessionData)
+  );
+
   return res.redirect(
     `${process.env.FRONTEND_URL}/dashboard?token=${token}&user=${encodeURIComponent(JSON.stringify(req.user))}`,
   );
+});
+
+export const logOut = asyncHandler(async (req, res) => {
+  const token =
+    req.cookies?.token || req.headers.authorization?.split(" ")[1];
+  const userId = req.user?._id?.toString();
+
+  if (token) {
+    // Blacklist token in Redis for 7 days
+    await redisClient.setEx(`blacklist:${token}`, 604800, "true");
+  }
+  if (userId) {
+    await redisClient.del(`user:session:${userId}`);
+  }
+
+  return res
+    .status(200)
+    .json(new ApiResponse(200, {}, "Logged out successfully"));
 });
 
 export const adminSignUp = asyncHandler(async (req, res) => {

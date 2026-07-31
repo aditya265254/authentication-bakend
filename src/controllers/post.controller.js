@@ -97,33 +97,62 @@ export const deletePost = asyncHandler(async (req, res) => {
 
 export const getAllPosts = asyncHandler(async (req, res) => {
     const cacheKey = "feed:posts";
+    const userId = req.user?._id?.toString();
 
     try {
-  
+        let posts = [];
+        
+        // 1. Check karo ki Redis cache mein feed padi hai kya
         const cachedFeed = await redisClient.get(cacheKey);
 
         if (cachedFeed) {
-            console.log("⚡ Serving feed from Redis Cache (Super Fast!)");
-            return res.status(200).json(
-                new ApiResponse(200, JSON.parse(cachedFeed), "Posts fetched successfully from cache")
-            );
+            posts = JSON.parse(cachedFeed);
+        } else {
+            // 2. Agar cache mein nahi hai, toh MongoDB se lao
+            const dbPosts = await PostModel.find({ isSoftDeleted: { $ne: true } })
+                .lean()
+                .populate("user", "fullName email")
+                .populate("comments.user", "fullName email")
+                .sort({ createdAt: -1 });
+
+            if (!dbPosts || dbPosts.length === 0) {
+                throw new ApiError(404, "No posts available");
+            }
+            posts = dbPosts;
         }
 
-        const posts = await PostModel.find({ isSoftDeleted: { $ne: true } })
-            .populate("user", "fullName email")
-            .populate("comments.user", "fullName email")
-            .sort({ createdAt: -1 });
+        // 3. 🔥 FIXED LOGIC: Redis se Live Likes, isLiked aur likes array sync karna (Concurrently)
+        await Promise.all(
+            posts.map(async (post) => {
+                const postId = post._id.toString();
+                const likedUsersKey = `post:${postId}:liked_users`;
 
-        if (!posts || posts.length === 0) {
-            throw new ApiError(404, "No posts available");
+                const keyExists = await redisClient.exists(likedUsersKey);
+
+                if (keyExists) {
+                    const userIds = await redisClient.sMembers(likedUsersKey);
+                    post.likes = userIds;
+                    post.likesCount = userIds.length;
+                    post.isLiked = userId ? userIds.includes(userId) : false;
+                } else {
+                    const mongoLikes = Array.isArray(post.likes)
+                        ? post.likes.map((id) => id.toString())
+                        : [];
+                    post.likes = mongoLikes;
+                    post.likesCount = mongoLikes.length;
+                    post.isLiked = userId ? mongoLikes.includes(userId) : false;
+                }
+            })
+        );
+
+        // 4. Agar cache mein nahi tha, toh save kar do (60 secs)
+        if (!cachedFeed) {
+            await redisClient.setEx(cacheKey, 60, JSON.stringify(posts));
         }
 
-        
-        await redisClient.setEx(cacheKey, 60, JSON.stringify(posts));
-
-        return res
-            .status(200)
-            .json(new ApiResponse(200, posts, "Posts fetched successfully from DB"));
+        return res.status(200).json(
+            new ApiResponse(200, posts, "Posts fetched successfully")
+        );
 
     } catch (error) {
         throw new ApiError(error.statusCode || 500, error.message || "Failed to fetch feed");
@@ -305,35 +334,48 @@ export const likePost = asyncHandler(async (req, res) => {
     const { postId } = req.params;
     const userId = req.user._id.toString(); 
 
-   
     const post = await PostModel.findById(postId);
     if (!post) {
         throw new ApiError(404, "Post not found");
     }
 
-   
     const likedUsersKey = `post:${postId}:liked_users`; 
 
-    
+    // Seed Redis key from MongoDB if key doesn't exist yet
+    const keyExists = await redisClient.exists(likedUsersKey);
+    if (!keyExists) {
+        const mongoLikes = Array.isArray(post.likes)
+            ? post.likes.map((id) => id.toString())
+            : [];
+        if (mongoLikes.length > 0) {
+            await redisClient.sAdd(likedUsersKey, mongoLikes);
+        }
+    }
+
     const hasLiked = await redisClient.sIsMember(likedUsersKey, userId);
 
     let isLiked = false;
-
     if (hasLiked) {
-      
-        await redisClient.sRem(likedUsersKey, userId);
+        await Promise.all([
+            redisClient.sRem(likedUsersKey, userId),
+            PostModel.findByIdAndUpdate(postId, { $pull: { likes: userId } })
+        ]);
         isLiked = false;
     } else {
-      
-        await redisClient.sAdd(likedUsersKey, userId);
+        await Promise.all([
+            redisClient.sAdd(likedUsersKey, userId),
+            PostModel.findByIdAndUpdate(postId, { $addToSet: { likes: userId } })
+        ]);
         isLiked = true;
     }
 
-   
-    const currentLikesCount = await redisClient.sCard(likedUsersKey);
+    const liveLikes = await redisClient.sMembers(likedUsersKey);
+    const currentLikesCount = liveLikes.length;
 
- 
-    await redisClient.sAdd('modified:posts', postId);
+    await Promise.all([
+        redisClient.sAdd('modified:posts', postId),
+        redisClient.del("feed:posts")
+    ]);
 
     return res.status(200).json(
         new ApiResponse(
@@ -341,6 +383,7 @@ export const likePost = asyncHandler(async (req, res) => {
             {
                 content: post.content,
                 imageUrl: post.imageUrl,
+                likes: liveLikes,
                 likesCount: currentLikesCount,
                 isLiked: isLiked
             },
