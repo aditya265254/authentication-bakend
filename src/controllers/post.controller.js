@@ -109,13 +109,12 @@ export const getAllPosts = asyncHandler(async (req, res) => {
     try {
         let posts = [];
 
-        // 1. Check karo ki Redis cache mein feed padi hai kya
         const cachedFeed = await redisClient.get(cacheKey);
 
         if (cachedFeed) {
             posts = JSON.parse(cachedFeed);
         } else {
-            // 2. Agar cache mein nahi hai, toh MongoDB se lao
+
             const dbPosts = await PostModel.find({ isSoftDeleted: { $ne: true } })
                 .lean()
                 .populate("user", "fullName email")
@@ -128,12 +127,12 @@ export const getAllPosts = asyncHandler(async (req, res) => {
             posts = dbPosts;
         }
 
-        // 3. Likes, Comments aur Shares sabhi ko parallel mein process karo
+
         await Promise.all(
             posts.map(async (post) => {
                 const postId = post._id.toString();
 
-                // --- LIKES HANDLING ---
+
                 const likedUsersKey = `post:${postId}:liked_users`;
                 const keyExists = await redisClient.exists(likedUsersKey);
 
@@ -151,7 +150,7 @@ export const getAllPosts = asyncHandler(async (req, res) => {
                     post.isLiked = userId ? mongoLikes.includes(userId) : false;
                 }
 
-                // --- COMMENTS HANDLING (100% Safe Fallback) ---
+
                 const commentKey = `post:${postId}:comments`;
                 const commentsExist = await redisClient.exists(commentKey);
 
@@ -173,7 +172,6 @@ export const getAllPosts = asyncHandler(async (req, res) => {
                     });
                 }
 
-                // --- SHARES HANDLING ---
                 const sharesKey = `post:${postId}:shares`;
                 const sharesExist = await redisClient.exists(sharesKey);
 
@@ -451,7 +449,7 @@ export const commentPost = asyncHandler(async (req, res) => {
 
     const commentKey = `post:${postId}:comments`;
 
-    // 1. Redis ke liye full object (Frontend ke liye)
+
     const redisCommentData = {
         user: {
             _id: userId,
@@ -462,18 +460,17 @@ export const commentPost = asyncHandler(async (req, res) => {
         createdAt: new Date()
     };
 
-    // 2. MongoDB ke liye sirf userId (Mongoose Schema ke mutabiq)
+
     const mongoCommentData = {
         user: userId,
         text: content,
         createdAt: new Date()
     };
 
-    // Redis mein full data aur DB mein proper ObjectId push karo
+
     await redisClient.lPush(commentKey, JSON.stringify(redisCommentData));
     await PostModel.findByIdAndUpdate(postId, { $push: { comments: mongoCommentData } });
 
-    // Cache clear karo
     await redisClient.del("feed:posts");
 
     return res.status(201).json(

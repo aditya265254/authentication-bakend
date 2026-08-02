@@ -9,41 +9,41 @@ import Post from "../models/post.model.js";
 import redisClient from "../config/redis.js";
 
 export const signUp = asyncHandler(async (req, res) => {
-    const { fullName, email, password } = req.body;
-    
-    
-    const existingEmail = await User.findOne({ email });
-    if (existingEmail) {
-        throw new ApiError(409, "Email already exists in database");
-    }
+  const { fullName, email, password } = req.body;
 
-   
-    const token = crypto.randomBytes(32).toString("hex");
 
-    
-    const newUser = await User.create({
-        fullName, 
-        email,
-        password,
-        verificationToken: token
-    });
+  const existingEmail = await User.findOne({ email });
+  if (existingEmail) {
+    throw new ApiError(409, "Email already exists in database");
+  }
 
-    try {
 
-        await sendVerificationEmail(newUser.email, token);
-     
-        return res.status(201).json(
-            new ApiResponse(201, null, "Registration successful! Please check your email to verify your account.")
-        );
-    } catch (mailError) {
-        console.error("error in sending mail:", mailError);
-        
-      
-        await User.findByIdAndDelete(newUser._id);
-        
-        
-        throw new ApiError(500, "Failed to send verification email. Please try again later.");
-    }
+  const token = crypto.randomBytes(32).toString("hex");
+
+
+  const newUser = await User.create({
+    fullName,
+    email,
+    password,
+    verificationToken: token
+  });
+
+  try {
+
+    await sendVerificationEmail(newUser.email, token);
+
+    return res.status(201).json(
+      new ApiResponse(201, null, "Registration successful! Please check your email to verify your account.")
+    );
+  } catch (mailError) {
+    console.error("error in sending mail:", mailError);
+
+
+    await User.findByIdAndDelete(newUser._id);
+
+
+    throw new ApiError(500, "Failed to send verification email. Please try again later.");
+  }
 });
 
 export const logIn = asyncHandler(async (req, res) => {
@@ -69,7 +69,7 @@ export const logIn = asyncHandler(async (req, res) => {
     { expiresIn: process.env.JWT_EXPIRY },
   );
 
-  
+
   const sessionData = {
     _id: userFind._id.toString(),
     fullName: userFind.fullName,
@@ -96,7 +96,7 @@ export const googleCallback = asyncHandler(async (req, res) => {
     { expiresIn: process.env.JWT_EXPIRY },
   );
 
-  // Cache Google user session in Redis (7 days TTL)
+
   const sessionData = {
     _id: req.user._id.toString(),
     fullName: req.user.fullName,
@@ -121,7 +121,7 @@ export const logOut = asyncHandler(async (req, res) => {
   const userId = req.user?._id?.toString();
 
   if (token) {
-    // Blacklist token in Redis for 7 days
+
     await redisClient.setEx(`blacklist:${token}`, 604800, "true");
   }
   if (userId) {
@@ -163,51 +163,51 @@ export const adminSignUp = asyncHandler(async (req, res) => {
 
 
 export const verifyEmail = asyncHandler(async (req, res) => {
-   
-    const { token } = req.query;
 
-    if (!token) {
-        throw new ApiError(400, "Token is required");
-    }
+  const { token } = req.query;
 
-    const user = await User.findOne({ verificationToken: token });
+  if (!token) {
+    throw new ApiError(400, "Token is required");
+  }
 
-    if (!user) {
-        throw new ApiError(400, "Invalid or expired verification token");
-    }
+  const user = await User.findOne({ verificationToken: token });
 
-  
-    user.isVerified = true;
-    user.verificationToken = undefined; 
+  if (!user) {
+    throw new ApiError(400, "Invalid or expired verification token");
+  }
 
-   
-    await user.save();
 
-    return res
-        .status(200)
-        .json(new ApiResponse(200, null, "Email verified successfully! You can now log in."));
+  user.isVerified = true;
+  user.verificationToken = undefined;
+
+
+  await user.save();
+
+  return res
+    .status(200)
+    .json(new ApiResponse(200, null, "Email verified successfully! You can now log in."));
 });
 
 
 export const getAdminDashboardData = asyncHandler(async (req, res) => {
-  
-    const [users, totalPosts, pendingAppeals] = await Promise.all([
-        User.find().select("-password").lean(),
-        Post.countDocuments(),
-        Post.find({ 
-            isSoftDeleted: true, 
-            userClarification: { $exists: true, $ne: "" } 
-        }).populate("user", "fullName email").lean()
-    ]);
 
-    const totalUsers = users.length;
+  const [users, totalPosts, pendingAppeals] = await Promise.all([
+    User.find().select("-password").lean(),
+    Post.countDocuments(),
+    Post.find({
+      isSoftDeleted: true,
+      userClarification: { $exists: true, $ne: "" }
+    }).populate("user", "fullName email").lean()
+  ]);
 
-    return res.status(200).json(
-        new ApiResponse(200, {
-            users,
-            totalUsers,
-            totalPosts,
-            pendingAppeals
-        }, "Admin dashboard data fetched successfully")
-    );
+  const totalUsers = users.length;
+
+  return res.status(200).json(
+    new ApiResponse(200, {
+      users,
+      totalUsers,
+      totalPosts,
+      pendingAppeals
+    }, "Admin dashboard data fetched successfully")
+  );
 });
