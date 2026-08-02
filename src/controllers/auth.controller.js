@@ -69,7 +69,7 @@ export const logIn = asyncHandler(async (req, res) => {
     { expiresIn: process.env.JWT_EXPIRY },
   );
 
-  // Cache user session in Redis (7 days TTL)
+  
   const sessionData = {
     _id: userFind._id.toString(),
     fullName: userFind.fullName,

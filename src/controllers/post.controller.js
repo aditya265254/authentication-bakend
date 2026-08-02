@@ -19,11 +19,11 @@ export const createPost = asyncHandler(async (req, res) => {
     let cloudinaryResponse = null;
 
     try {
-      
+
         if (localFilePath) {
             cloudinaryResponse = await uploadOnCloudinary(localFilePath);
-            
-           
+
+
             if (!cloudinaryResponse) {
                 throw new ApiError(500, "Failed to upload image to cloudinary");
             }
@@ -55,33 +55,33 @@ export const createPost = asyncHandler(async (req, res) => {
 export const getUserPost = asyncHandler(async (req, res) => {
     const userId = req.user?._id;
 
-    if(!userId) {
+    if (!userId) {
         throw new ApiError(401, "Unauthorized access")
     }
-    const posts = await PostModel.find({user: userId}).sort({createdAt: -1})
+    const posts = await PostModel.find({ user: userId }).sort({ createdAt: -1 })
 
-    return res 
-    .status(200)
-    .json(new ApiResponse(200, posts, "User post fetch Sucessfully" ))
+    return res
+        .status(200)
+        .json(new ApiResponse(200, posts, "User post fetch Sucessfully"))
 })
 
 export const deletePost = asyncHandler(async (req, res) => {
-    const {postId} = req.params;
+    const { postId } = req.params;
     const userId = req.user?._id;
 
     if (!postId || !postId.match(/^[0-9a-fA-F]{24}$/)) {
-    throw new ApiError(400, "Invalid post ID")
-}
+        throw new ApiError(400, "Invalid post ID")
+    }
 
     const post = await PostModel.findById(postId)
 
-    if(!post) {
+    if (!post) {
         throw new ApiError(404, "Post not found")
     }
-    if(post.user.toString() !== userId.toString()){
-        throw new ApiError(403, "YOu are not authorized to delet this post " )
+    if (post.user.toString() !== userId.toString()) {
+        throw new ApiError(403, "YOu are not authorized to delet this post ")
     }
-    if(post.cloudinaryPublicId) {
+    if (post.cloudinaryPublicId) {
         try {
             await cloudinary.uploader.destroy(post.cloudinaryPublicId)
         } catch (error) {
@@ -89,7 +89,14 @@ export const deletePost = asyncHandler(async (req, res) => {
         }
     }
     await PostModel.findByIdAndDelete(postId);
-    
+
+    await Promise.all([
+        redisClient.del("feed:posts"),
+        redisClient.del(`post:${postId}:comments`),
+        redisClient.del(`post:${postId}:liked_users`),
+        redisClient.sRem('modified:posts', postId)
+    ]);
+
     return res
         .status(200)
         .json(new ApiResponse(200, {}, "Post deleted successfully"));
@@ -101,7 +108,7 @@ export const getAllPosts = asyncHandler(async (req, res) => {
 
     try {
         let posts = [];
-        
+
         // 1. Check karo ki Redis cache mein feed padi hai kya
         const cachedFeed = await redisClient.get(cacheKey);
 
@@ -121,12 +128,13 @@ export const getAllPosts = asyncHandler(async (req, res) => {
             posts = dbPosts;
         }
 
-        // 3. 🔥 FIXED LOGIC: Redis se Live Likes, isLiked aur likes array sync karna (Concurrently)
+        // 3. Likes, Comments aur Shares sabhi ko parallel mein process karo
         await Promise.all(
             posts.map(async (post) => {
                 const postId = post._id.toString();
-                const likedUsersKey = `post:${postId}:liked_users`;
 
+                // --- LIKES HANDLING ---
+                const likedUsersKey = `post:${postId}:liked_users`;
                 const keyExists = await redisClient.exists(likedUsersKey);
 
                 if (keyExists) {
@@ -142,10 +150,42 @@ export const getAllPosts = asyncHandler(async (req, res) => {
                     post.likesCount = mongoLikes.length;
                     post.isLiked = userId ? mongoLikes.includes(userId) : false;
                 }
+
+                // --- COMMENTS HANDLING (100% Safe Fallback) ---
+                const commentKey = `post:${postId}:comments`;
+                const commentsExist = await redisClient.exists(commentKey);
+
+                if (commentsExist) {
+                    const rawComments = await redisClient.lRange(commentKey, 0, -1);
+                    post.comments = rawComments.map(c => {
+                        const parsed = JSON.parse(c);
+                        if (!parsed.user || typeof parsed.user !== 'object') {
+                            parsed.user = { fullName: "User", email: "" };
+                        }
+                        return parsed;
+                    });
+                } else {
+                    post.comments = (post.comments || []).map(comment => {
+                        if (!comment.user || typeof comment.user !== 'object') {
+                            comment.user = { fullName: "User", email: "" };
+                        }
+                        return comment;
+                    });
+                }
+
+                // --- SHARES HANDLING ---
+                const sharesKey = `post:${postId}:shares`;
+                const sharesExist = await redisClient.exists(sharesKey);
+
+                if (sharesExist) {
+                    const redisShares = await redisClient.get(sharesKey);
+                    post.sharesCount = parseInt(redisShares, 10);
+                } else {
+                    post.sharesCount = post.sharesCount || 0;
+                }
             })
         );
 
-        // 4. Agar cache mein nahi tha, toh save kar do (60 secs)
         if (!cachedFeed) {
             await redisClient.setEx(cacheKey, 60, JSON.stringify(posts));
         }
@@ -158,33 +198,34 @@ export const getAllPosts = asyncHandler(async (req, res) => {
         throw new ApiError(error.statusCode || 500, error.message || "Failed to fetch feed");
     }
 });
-
 export const softDeletePost = asyncHandler(async (req, res) => {
-const {postId} = req.params
-const { reason } = req.body  
+    const { postId } = req.params
+    const { reason } = req.body
 
-if (!postId) {
-    throw new ApiError(400, "Invalid post ID")
-}
+    if (!postId) {
+        throw new ApiError(400, "Invalid post ID")
+    }
 
-const post = await PostModel.findById(postId)  
+    const post = await PostModel.findById(postId)
 
-if (!post) {
-    throw new ApiError(404, "Post not found")
-}
+    if (!post) {
+        throw new ApiError(404, "Post not found")
+    }
 
- if (post.isSoftDeleted) {
+    if (post.isSoftDeleted) {
         throw new ApiError(400, "Post already soft deleted")
     }
 
     const updatedPost = await PostModel.findByIdAndUpdate(
         postId,
         {
-            isSoftDeleted: true,        
+            isSoftDeleted: true,
             deletedByReason: reason
         },
         { new: true }
     )
+
+    await redisClient.del("feed:posts");
 
     return res.status(200).json(
         new ApiResponse(200, updatedPost, "Post soft deleted successfully")
@@ -192,7 +233,7 @@ if (!post) {
 })
 
 export const appealPost = asyncHandler(async (req, res) => {
-    const {postId } = req.params
+    const { postId } = req.params
     const { userClarification } = req.body
 
     if (!postId) {
@@ -203,19 +244,19 @@ export const appealPost = asyncHandler(async (req, res) => {
         throw new ApiError(400, "Appeal can't be empty")
     }
 
-    const post = await PostModel.findById(postId)  
+    const post = await PostModel.findById(postId)
 
     if (!post) {
         throw new ApiError(404, "Post not found")
     }
 
-    if (!post.isSoftDeleted) {  
+    if (!post.isSoftDeleted) {
         throw new ApiError(400, "You can't apeal because post is not soft deleted by admin")
     }
 
-    const updatedPost = await PostModel.findByIdAndUpdate( 
+    const updatedPost = await PostModel.findByIdAndUpdate(
         postId,
-        { userClarification: userClarification },  
+        { userClarification: userClarification },
         { new: true }
     )
 
@@ -245,6 +286,8 @@ export const restorePost = asyncHandler(async (req, res) => {
         { new: true }
     )
 
+    await redisClient.del("feed:posts");
+
     return res.status(200).json(
         new ApiResponse(200, updatedPost, "Post restored successfully")
     )
@@ -264,10 +307,10 @@ export const updatePost = asyncHandler(async (req, res) => {
 
     const updateFields = {}
 
-   
+
     if (content) updateFields.content = content
 
-   
+
     if (removeImage === "true" && post.cloudinaryPublicId) {
         try {
             await cloudinary.uploader.destroy(post.cloudinaryPublicId)
@@ -278,9 +321,9 @@ export const updatePost = asyncHandler(async (req, res) => {
         updateFields.cloudinaryPublicId = ""
     }
 
-    
+
     if (localFilePath) {
-  
+
         if (post.cloudinaryPublicId) {
             try {
                 await cloudinary.uploader.destroy(post.cloudinaryPublicId)
@@ -288,7 +331,7 @@ export const updatePost = asyncHandler(async (req, res) => {
                 throw new ApiError(500, "Old image delete failed")
             }
         }
- 
+
         const uploaded = await uploadOnCloudinary(localFilePath)
         if (!uploaded) throw new ApiError(500, "Image upload failed")
 
@@ -301,6 +344,8 @@ export const updatePost = asyncHandler(async (req, res) => {
         updateFields,
         { new: true }
     )
+
+    await redisClient.del("feed:posts");
 
     return res.status(200).json(
         new ApiResponse(200, updatedPost, "Post updated successfully")
@@ -323,6 +368,13 @@ export const adminHardDelete = asyncHandler(async (req, res) => {
 
     await PostModel.findByIdAndDelete(postId)
 
+    await Promise.all([
+        redisClient.del("feed:posts"),
+        redisClient.del(`post:${postId}:comments`),
+        redisClient.del(`post:${postId}:liked_users`),
+        redisClient.sRem('modified:posts', postId)
+    ]);
+
     return res.status(200).json(
         new ApiResponse(200, {}, "Post permanently deleted")
     )
@@ -332,16 +384,16 @@ export const adminHardDelete = asyncHandler(async (req, res) => {
 
 export const likePost = asyncHandler(async (req, res) => {
     const { postId } = req.params;
-    const userId = req.user._id.toString(); 
+    const userId = req.user._id.toString();
 
     const post = await PostModel.findById(postId);
     if (!post) {
         throw new ApiError(404, "Post not found");
     }
 
-    const likedUsersKey = `post:${postId}:liked_users`; 
+    const likedUsersKey = `post:${postId}:liked_users`;
 
-    // Seed Redis key from MongoDB if key doesn't exist yet
+
     const keyExists = await redisClient.exists(likedUsersKey);
     if (!keyExists) {
         const mongoLikes = Array.isArray(post.likes)
@@ -392,59 +444,67 @@ export const likePost = asyncHandler(async (req, res) => {
     );
 });
 
+export const commentPost = asyncHandler(async (req, res) => {
+    const { postId } = req.params;
+    const userId = req.user._id;
+    const { content } = req.body;
 
-export const commentPost = asyncHandler(async (req, res)=> {
-    const {postId} = req.params
-    const userId = req.user._id
-    const {content} = req.body
+    const commentKey = `post:${postId}:comments`;
 
-     if(!content || content.trim() === ""){
-        throw new ApiError(400, "comment text is required")
-     }
+    // 1. Redis ke liye full object (Frontend ke liye)
+    const redisCommentData = {
+        user: {
+            _id: userId,
+            fullName: req.user.fullName,
+            email: req.user.email
+        },
+        text: content,
+        createdAt: new Date()
+    };
 
-     const post = await PostModel.findById(postId)
-     if(!post){
-        throw new ApiError(404, "Post not found")
-     }
+    // 2. MongoDB ke liye sirf userId (Mongoose Schema ke mutabiq)
+    const mongoCommentData = {
+        user: userId,
+        text: content,
+        createdAt: new Date()
+    };
 
-     const updatedPost = await PostModel.findByIdAndUpdate(
-        postId, 
-        {
-            $push:{
-                comments: {
-                    user: userId,
-                    text: content.trim()
-                }
+    // Redis mein full data aur DB mein proper ObjectId push karo
+    await redisClient.lPush(commentKey, JSON.stringify(redisCommentData));
+    await PostModel.findByIdAndUpdate(postId, { $push: { comments: mongoCommentData } });
 
-     }
-    },
-    {new: true}
-).populate("comments.user", "userName email");
+    // Cache clear karo
+    await redisClient.del("feed:posts");
 
-const newComment = updatedPost.comments[updatedPost.comments.length - 1]
-
-return res
-        .status(201)
-        .json(new ApiResponse(201, newComment, "Comment added successfully"));
-
-})
+    return res.status(201).json(
+        new ApiResponse(201, redisCommentData, "Comment added successfully")
+    );
+});
 
 export const sharePost = asyncHandler(async (req, res) => {
-    const { postId } = req.params
-    
-    const post = await PostModel.findById(postId)
-    if (!post) throw new ApiError(404, "Post not found")
-    
+    const { postId } = req.params;
+
+    const post = await PostModel.findById(postId);
+    if (!post) throw new ApiError(404, "Post not found");
+
+    const sharesKey = `post:${postId}:shares`;
+
+    const updatedSharesCount = await redisClient.incr(sharesKey);
+
+
     const updatedPost = await PostModel.findByIdAndUpdate(
         postId,
-    { $inc: { sharesCount: 1 } },
-    { new: true }
-).select("content imageUrl sharesCount likes comments")
-    
+        { $inc: { sharesCount: 1 } },
+        { returnDocument: 'after' }
+    ).select("content imageUrl sharesCount likes comments");
+
+
+    await redisClient.del("feed:posts");
+
     return res.status(200).json(
-        new ApiResponse(200, updatedPost, "Post shared successfully")
-    )
-})
+        new ApiResponse(200, { ...updatedPost.toObject(), sharesCount: updatedSharesCount }, "Post shared successfully")
+    );
+});
 
 export const getAdminUserPosts = asyncHandler(async (req, res) => {
     const { userId } = req.params;
@@ -453,12 +513,12 @@ export const getAdminUserPosts = asyncHandler(async (req, res) => {
         throw new ApiError(400, "Invalid user ID provided");
     }
 
-   
+
     const posts = await PostModel.find({ user: userId })
         .populate("user", "fullName email")
         .sort({ createdAt: -1 });
 
-    return res 
+    return res
         .status(200)
         .json(new ApiResponse(200, posts, "User posts fetched for admin successfully"));
 });
