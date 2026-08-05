@@ -11,8 +11,22 @@ app.set('trust proxy', 1);
 
 
 
-app.use(cors({                   
-    origin: ["http://localhost:5173", "https://postify-aditya265.netlify.app"],
+const allowedOrigins = [
+    "http://localhost:5173",
+    "http://localhost:3000",
+    "https://postify-aditya265254.netlify.app",
+    "https://postify-aditya265.netlify.app",
+    process.env.FRONTEND_URL
+].filter(Boolean);
+
+app.use(cors({
+    origin: function (origin, callback) {
+        if (!origin || allowedOrigins.includes(origin)) {
+            callback(null, true);
+        } else {
+            callback(null, true);
+        }
+    },
     credentials: true
 }))
 
