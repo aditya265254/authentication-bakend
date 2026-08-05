@@ -5,6 +5,9 @@ services:
       - "3000:3000"
     env_file:
       - .env
+    environment:
+      - REDIS_URL=${DOCKER_REDIS_URL:-redis://redis:6379}
+      - MONGODB_URI=${DOCKER_MONGODB_URI:-mongodb://${MONGO_INITDB_ROOT_USERNAME:-admin}:${MONGO_INITDB_ROOT_PASSWORD:-password}@mongo:27017/chatapp?authSource=admin}
     depends_on:
       - mongo
       - redis
@@ -22,8 +25,8 @@ services:
     volumes:
       - mongo_data:/data/db
     environment:
-      - MONGO_INITDB_ROOT_USERNAME=admin
-      - MONGO_INITDB_ROOT_PASSWORD=password
+      - MONGO_INITDB_ROOT_USERNAME=${MONGO_INITDB_ROOT_USERNAME:-admin}
+      - MONGO_INITDB_ROOT_PASSWORD=${MONGO_INITDB_ROOT_PASSWORD:-password}
     networks:
       - chat-network
 
